@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stt", choices=["auto", "mistral", "whisper"], default=None)
     parser.add_argument("--tts", choices=["auto", "kokoro", "piper", "espeak", "none"], default=None)
     parser.add_argument("--wake-word", default=None)
+    parser.add_argument("--wake-mode", choices=["auto", "model", "phrase"], default=None)
     return parser
 
 
@@ -48,17 +49,86 @@ def run_text_mode(cfg: Config, once: bool) -> int:
     return 0
 
 
-def run_voice_mode(cfg: Config, once: bool) -> int:
-    from .audio import Microphone, beep, record_utterance, save_wav
+def _transcribe_pcm(pcm, cfg: Config) -> str:
+    from .audio import save_wav
     from .stt import transcribe_file
-    from .tts import speak
-    from .wakeword import create_listener
 
-    listener = create_listener(cfg)
-    conversation = Conversation(create_backend(cfg), cfg.system_prompt)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        wav_path = tmp.name
+    try:
+        save_wav(wav_path, pcm, cfg.sample_rate)
+        return transcribe_file(wav_path, cfg)
+    finally:
+        os.unlink(wav_path)
+
+
+def _handle_query(text: str, conversation: Conversation, cfg: Config) -> bool:
+    from .tts import speak
+
+    print(f"you> {text}")
+    if is_exit_phrase(text):
+        speak("Goodbye!", cfg)
+        return True
+    reply = conversation.ask(text)
+    print(f"assistant> {reply}")
+    speak(reply, cfg)
+    return False
+
+
+def _record(mic, cfg: Config):
+    from .audio import record_utterance
+
+    return record_utterance(
+        mic,
+        silence_threshold=cfg.silence_threshold,
+        silence_seconds=cfg.silence_seconds,
+        max_utterance_seconds=cfg.max_utterance_seconds,
+    )
+
+
+def _run_phrase_mode(cfg: Config, once: bool, conversation: Conversation) -> int:
+    from .audio import Microphone, beep
+    from .wakeword import extract_query
+
     print(
         f"voice mode | backend={cfg.backend} stt={cfg.stt} tts={cfg.tts} "
-        f"wake word='{cfg.wake_word}' (Ctrl+C to quit)"
+        f"wake mode=phrase phrase='{cfg.wake_word}' (Ctrl+C to quit)"
+    )
+    with Microphone(cfg.sample_rate, cfg.chunk_samples) as mic:
+        while True:
+            pcm = _record(mic, cfg)
+            if pcm.size == 0:
+                continue
+            query = extract_query(_transcribe_pcm(pcm, cfg), cfg.wake_word)
+            if query is None:
+                continue
+            print("wake phrase detected")
+            beep(cfg.sample_rate)
+            if not query:
+                pcm = _record(mic, cfg)
+                if pcm.size == 0:
+                    continue
+                query = _transcribe_pcm(pcm, cfg)
+                if not query:
+                    continue
+            if _handle_query(query, conversation, cfg):
+                break
+            if once:
+                break
+    return 0
+
+
+def run_voice_mode(cfg: Config, once: bool) -> int:
+    from .audio import Microphone, beep
+    from .wakeword import create_listener
+
+    conversation = Conversation(create_backend(cfg), cfg.system_prompt)
+    if cfg.wake_mode == "phrase":
+        return _run_phrase_mode(cfg, once, conversation)
+    listener = create_listener(cfg)
+    print(
+        f"voice mode | backend={cfg.backend} stt={cfg.stt} tts={cfg.tts} "
+        f"wake mode=model word='{cfg.wake_word}' (Ctrl+C to quit)"
     )
     with Microphone(cfg.sample_rate, cfg.chunk_samples) as mic:
         while True:
@@ -67,30 +137,14 @@ def run_voice_mode(cfg: Config, once: bool) -> int:
                 continue
             print("wake word detected")
             beep(cfg.sample_rate)
-            pcm = record_utterance(
-                mic,
-                silence_threshold=cfg.silence_threshold,
-                silence_seconds=cfg.silence_seconds,
-                max_utterance_seconds=cfg.max_utterance_seconds,
-            )
+            pcm = _record(mic, cfg)
             if pcm.size == 0:
                 continue
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                wav_path = tmp.name
-            try:
-                save_wav(wav_path, pcm, cfg.sample_rate)
-                text = transcribe_file(wav_path, cfg)
-            finally:
-                os.unlink(wav_path)
+            text = _transcribe_pcm(pcm, cfg)
             if not text:
                 continue
-            print(f"you> {text}")
-            if is_exit_phrase(text):
-                speak("Goodbye!", cfg)
+            if _handle_query(text, conversation, cfg):
                 break
-            reply = conversation.ask(text)
-            print(f"assistant> {reply}")
-            speak(reply, cfg)
             if once:
                 break
     return 0
@@ -99,7 +153,7 @@ def run_voice_mode(cfg: Config, once: bool) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     overrides = {}
-    for name in ("backend", "stt", "tts", "wake_word"):
+    for name in ("backend", "stt", "tts", "wake_word", "wake_mode"):
         value = getattr(args, name)
         if value is not None:
             overrides[name] = value

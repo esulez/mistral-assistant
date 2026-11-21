@@ -12,8 +12,11 @@ microphone -> wake word -> record utterance -> speech-to-text
            -> brain (vibe CLI or Mistral API) -> text-to-speech -> speaker
 ```
 
-- **Wake word**: [openwakeword](https://github.com/Picovoice/openwakeword) locally
-  (default: `alexa`). Falls back to an energy-based listener if the package or a
+- **Wake word**: default phrase is **"salut mistral ça va"**. Custom phrases are
+  spotted via speech-to-text (accent- and punctuation-insensitive), so any phrase
+  works. Built-in openwakeword models (e.g. `alexa`, `hey jarvis`) or a custom
+  `.onnx` model are used instead when the wake word is one of those (local,
+  lower latency). Falls back to an energy-based listener if the package or a
   model is unavailable.
 - **Speech-to-text**: Mistral Voxtral transcription API (`stt=mistral`, needs
   `MISTRAL_API_KEY`) or local `faster-whisper` (`stt=whisper`).
@@ -44,8 +47,9 @@ export MISTRAL_API_KEY=...
 Voice mode (needs a microphone and speaker):
 
 ```bash
-python -m assistant                      # wake word "alexa", then talk
-python -m assistant --wake-word "hey jarvis"
+python -m assistant                      # say "salut mistral ça va", then talk
+python -m assistant --wake-word "hey jarvis"   # built-in model mode
+python -m assistant --wake-word "hey computer"  # custom phrase mode (via STT)
 python -m assistant --backend api --once # single question via the Mistral API
 ```
 
@@ -73,7 +77,8 @@ All settings can be overridden with environment variables:
 | `ASSISTANT_WHISPER_MODEL` | `base` | faster-whisper model for `stt=whisper` |
 | `ASSISTANT_TTS` | `auto` | `kokoro`, `piper`, `espeak`, `none`, or `auto` (first available) |
 | `ASSISTANT_TTS_VOICE` | `af_heart` | Kokoro voice |
-| `ASSISTANT_WAKE_WORD` | `alexa` | openwakeword built-in model name |
+| `ASSISTANT_WAKE_WORD` | `salut mistral ça va` | wake phrase; built-in model name or custom phrase |
+| `ASSISTANT_WAKE_MODE` | `auto` | `model` (openwakeword/custom onnx), `phrase` (STT spotting), or `auto` (built-in name or custom model → `model`, otherwise `phrase`) |
 | `ASSISTANT_WAKEWORD_MODEL` | — | path to a custom `.onnx` wake-word model |
 | `ASSISTANT_WAKE_THRESHOLD` | `0.5` | detection score threshold |
 | `ASSISTANT_SAMPLE_RATE` | `16000` | microphone sample rate (Hz) |
@@ -95,7 +100,7 @@ assistant/
   cli.py       entry point: voice loop and text mode
   config.py    environment-driven configuration
   audio.py     microphone capture, utterance recording, playback
-  wakeword.py  openwakeword listener with energy fallback
+  wakeword.py  wake-word listeners + phrase spotting (normalize/extract_query)
   stt.py       Voxtral API / faster-whisper transcription
   brain.py     backends (vibe CLI, Mistral API, echo) + conversation state
   tts.py       Kokoro / piper / espeak speech synthesis

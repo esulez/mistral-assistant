@@ -1,7 +1,24 @@
+import re
+import unicodedata
+
 import numpy as np
 
 from .audio import frame_rms
 from .config import Config
+
+
+def normalize_text(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", stripped).strip()
+
+
+def extract_query(text: str, wake_phrase: str) -> str | None:
+    norm_phrase = normalize_text(wake_phrase)
+    norm_text = normalize_text(text)
+    if not norm_phrase or norm_phrase not in norm_text:
+        return None
+    return norm_text.split(norm_phrase, 1)[1].strip()
 
 
 class OpenWakeWordListener:

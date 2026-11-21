@@ -9,8 +9,9 @@ import numpy as np
 from assistant.audio import wav_bytes
 from assistant.brain import Conversation, EchoBackend, create_backend
 from assistant.cli import is_exit_phrase
-from assistant.config import Config, resolve_backend, resolve_stt
+from assistant.config import Config, resolve_backend, resolve_stt, resolve_wake_mode
 from assistant.tts import resolve_tts
+from assistant.wakeword import extract_query, normalize_text
 
 
 class ConfigTest(unittest.TestCase):
@@ -21,7 +22,8 @@ class ConfigTest(unittest.TestCase):
         self.assertIsNone(cfg.api_key)
         self.assertEqual(cfg.backend, "echo")
         self.assertEqual(cfg.stt, "whisper")
-        self.assertEqual(cfg.wake_word, "alexa")
+        self.assertEqual(cfg.wake_word, "salut mistral ça va")
+        self.assertEqual(cfg.wake_mode, "phrase")
         self.assertEqual(cfg.sample_rate, 16000)
 
     def test_env_overrides(self):
@@ -82,6 +84,31 @@ class AudioTest(unittest.TestCase):
             self.assertEqual(wav.getnchannels(), 1)
             self.assertEqual(wav.getsampwidth(), 2)
             self.assertEqual(wav.getnframes(), 1600)
+
+
+class WakePhraseTest(unittest.TestCase):
+    def test_normalize_strips_accents_and_punctuation(self):
+        self.assertEqual(normalize_text("Salut Mistral, ça va ?"), "salut mistral ca va")
+
+    def test_extract_query_returns_none_without_phrase(self):
+        self.assertIsNone(extract_query("bonjour", "salut mistral ça va"))
+
+    def test_extract_query_phrase_only(self):
+        self.assertEqual(extract_query("Salut Mistral, ça va ?", "salut mistral ça va"), "")
+
+    def test_extract_query_with_question(self):
+        self.assertEqual(
+            extract_query("salut mistral ça va, quelle heure est-il ?", "salut mistral ça va"),
+            "quelle heure est il",
+        )
+
+    def test_resolve_wake_mode(self):
+        self.assertEqual(resolve_wake_mode("auto", None, "alexa"), "model")
+        self.assertEqual(resolve_wake_mode("auto", None, "hey jarvis"), "model")
+        self.assertEqual(resolve_wake_mode("auto", None, "salut mistral ça va"), "phrase")
+        self.assertEqual(resolve_wake_mode("auto", "/tmp/custom.onnx", "anything"), "model")
+        self.assertEqual(resolve_wake_mode("phrase", None, "alexa"), "phrase")
+        self.assertEqual(resolve_wake_mode("model", None, "salut mistral ça va"), "model")
 
 
 class TtsTest(unittest.TestCase):

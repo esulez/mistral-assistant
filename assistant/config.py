@@ -8,6 +8,19 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 DEFAULT_STT_MODEL = "voxtral-mini-latest"
 DEFAULT_CHAT_MODEL = "mistral-large-latest"
+DEFAULT_WAKE_WORD = "salut mistral ça va"
+
+BUILTIN_WAKE_WORDS = {
+    "alexa",
+    "hey mycroft",
+    "hey_mycroft",
+    "hey jarvis",
+    "hey_jarvis",
+    "hey rhasspy",
+    "hey_rhasspy",
+    "timers",
+    "weather",
+}
 
 
 @dataclass
@@ -23,6 +36,7 @@ class Config:
     tts_voice: str
     tts_lang: str
     wake_word: str
+    wake_mode: str
     wakeword_model: str | None
     wake_threshold: float
     sample_rate: int
@@ -49,7 +63,8 @@ class Config:
             tts=overrides.get("tts", os.getenv("ASSISTANT_TTS", "auto")),
             tts_voice=overrides.get("tts_voice", os.getenv("ASSISTANT_TTS_VOICE", "af_heart")),
             tts_lang=overrides.get("tts_lang", os.getenv("ASSISTANT_TTS_LANG", "a")),
-            wake_word=overrides.get("wake_word", os.getenv("ASSISTANT_WAKE_WORD", "alexa")),
+            wake_word=overrides.get("wake_word", os.getenv("ASSISTANT_WAKE_WORD", DEFAULT_WAKE_WORD)),
+            wake_mode=overrides.get("wake_mode", os.getenv("ASSISTANT_WAKE_MODE", "auto")),
             wakeword_model=overrides.get(
                 "wakeword_model", os.getenv("ASSISTANT_WAKEWORD_MODEL") or None
             ),
@@ -67,6 +82,9 @@ class Config:
         )
         values["backend"] = resolve_backend(values["backend"], api_key)
         values["stt"] = resolve_stt(values["stt"], api_key)
+        values["wake_mode"] = resolve_wake_mode(
+            values["wake_mode"], values["wakeword_model"], values["wake_word"]
+        )
         return cls(**values)
 
 
@@ -84,3 +102,13 @@ def resolve_stt(requested: str, api_key: str | None) -> str:
     if requested != "auto":
         return requested
     return "mistral" if api_key else "whisper"
+
+
+def resolve_wake_mode(requested: str, wakeword_model: str | None, wake_word: str) -> str:
+    if requested != "auto":
+        return requested
+    if wakeword_model:
+        return "model"
+    if wake_word.strip().lower() in BUILTIN_WAKE_WORDS:
+        return "model"
+    return "phrase"

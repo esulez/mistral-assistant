@@ -158,11 +158,15 @@ def main(argv: list[str] | None = None) -> int:
         if value is not None:
             overrides[name] = value
     cfg = Config.from_env(**overrides)
-    if args.text:
-        return run_text_mode(cfg, args.once)
     try:
-        import sounddevice  # noqa: F401
-    except OSError as exc:
-        print(f"audio unavailable ({exc}); use --text mode", file=sys.stderr)
+        if args.text:
+            return run_text_mode(cfg, args.once)
+        try:
+            import sounddevice  # noqa: F401
+        except OSError as exc:
+            print(f"audio unavailable ({exc}); use --text mode", file=sys.stderr)
+            return 2
+        return run_voice_mode(cfg, args.once)
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2
-    return run_voice_mode(cfg, args.once)

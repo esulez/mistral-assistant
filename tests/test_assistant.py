@@ -1,5 +1,7 @@
 import io
 import os
+import sys
+import types
 import unittest
 import wave
 from unittest import mock
@@ -109,6 +111,25 @@ class WakePhraseTest(unittest.TestCase):
         self.assertEqual(resolve_wake_mode("auto", "/tmp/custom.onnx", "anything"), "model")
         self.assertEqual(resolve_wake_mode("phrase", None, "alexa"), "phrase")
         self.assertEqual(resolve_wake_mode("model", None, "salut mistral ça va"), "model")
+
+
+class MistralImportGuardTest(unittest.TestCase):
+    def _broken_sdk(self):
+        return mock.patch.dict(sys.modules, {"mistralai": types.ModuleType("mistralai")})
+
+    def test_api_backend_raises_actionable_error_when_sdk_broken(self):
+        cfg = Config.from_env(backend="api", api_key="k")
+        with self._broken_sdk(), self.assertRaises(RuntimeError) as ctx:
+            create_backend(cfg)
+        self.assertIn("force-reinstall", str(ctx.exception))
+
+    def test_main_returns_2_with_clear_message_when_sdk_broken(self):
+        from assistant.cli import main
+
+        with mock.patch.dict(os.environ, {"MISTRAL_API_KEY": "k"}, clear=True):
+            with self._broken_sdk():
+                rc = main(["--text", "--backend", "api", "--once"])
+        self.assertEqual(rc, 2)
 
 
 class TtsTest(unittest.TestCase):

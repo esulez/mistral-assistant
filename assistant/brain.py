@@ -4,6 +4,19 @@ import subprocess
 from .config import Config
 
 
+def import_mistral():
+    try:
+        from mistralai import Mistral
+    except ImportError as exc:
+        raise RuntimeError(
+            "the mistralai SDK is missing or broken (no 'Mistral' class). Fix with: "
+            "pip install --force-reinstall --no-cache-dir 'mistralai>=1.0' -- and if a "
+            "'mistralai/' folder sits in the project root, remove it, it shadows the "
+            "installed package"
+        ) from exc
+    return Mistral
+
+
 class EchoBackend:
     def reply(self, history: list[dict], system_prompt: str) -> str:
         return f"Echo: {history[-1]['content']}"
@@ -11,12 +24,10 @@ class EchoBackend:
 
 class ApiBackend:
     def __init__(self, cfg: Config):
-        from mistralai import Mistral
-
         if not cfg.api_key:
             raise RuntimeError("MISTRAL_API_KEY is required for backend=api")
         self.cfg = cfg
-        self.client = Mistral(api_key=cfg.api_key)
+        self.client = import_mistral()(api_key=cfg.api_key)
 
     def reply(self, history: list[dict], system_prompt: str) -> str:
         messages = [{"role": "system", "content": system_prompt}] + history

@@ -9,9 +9,9 @@ _whisper_model = None
 def _client(api_key: str):
     global _mistral_client
     if _mistral_client is None:
-        from mistralai import Mistral
+        from .brain import import_mistral
 
-        _mistral_client = Mistral(api_key=api_key)
+        _mistral_client = import_mistral()(api_key=api_key)
     return _mistral_client
 
 

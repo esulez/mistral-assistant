@@ -62,6 +62,7 @@ class VibeBackend:
                     cmd,
                     capture_output=True,
                     text=True,
+                    stdin=subprocess.DEVNULL,
                     timeout=self.cfg.vibe_timeout,
                 )
             except subprocess.TimeoutExpired:

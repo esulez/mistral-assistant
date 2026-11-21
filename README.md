@@ -73,7 +73,11 @@ python -m assistant --text               # type instead of speaking
 printf 'hello\ngoodbye\n' | python -m assistant --text --backend echo
 ```
 
-Say "goodbye" (or press Ctrl+C) to end the session.
+Say "goodbye" (or press Ctrl+C) to end the session. After each answer the
+assistant prints `listening...` and keeps listening; per-turn errors are logged
+and the session continues. To pick a voice: `--tts-voice af_sarah` (or
+`ASSISTANT_TTS_VOICE=af_sarah`). US English female Kokoro voices: `af_bella`
+(default), `af_sarah`, `af_heart`, `af_nicole`, `af_sky`.
 
 ## Configuration
 
@@ -89,7 +93,7 @@ All settings can be overridden with environment variables:
 | `ASSISTANT_STT_MODEL` | `voxtral-mini-latest` | transcription model for `stt=mistral` |
 | `ASSISTANT_WHISPER_MODEL` | `base` | faster-whisper model for `stt=whisper` |
 | `ASSISTANT_TTS` | `auto` | `kokoro`, `piper`, `espeak`, `none`, or `auto` (first available) |
-| `ASSISTANT_TTS_VOICE` | `af_heart` | Kokoro voice |
+| `ASSISTANT_TTS_VOICE` | `af_bella` | Kokoro voice; US English female: `af_bella`, `af_sarah`, `af_heart`, `af_nicole`, `af_sky` (also `--tts-voice`) |
 | `ASSISTANT_WAKE_WORD` | `salut mistral ça va` | wake phrase; built-in model name or custom phrase |
 | `ASSISTANT_WAKE_MODE` | `auto` | `model` (openwakeword/custom onnx), `phrase` (STT spotting), or `auto` (built-in name or custom model → `model`, otherwise `phrase`) |
 | `ASSISTANT_WAKEWORD_MODEL` | — | path to a custom `.onnx` wake-word model |

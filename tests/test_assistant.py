@@ -89,6 +89,32 @@ class CliHelpersTest(unittest.TestCase):
         cfg = Config.from_env(tts="none")
         self.assertFalse(_handle_query("hello", Boom(), cfg))
 
+    def test_text_mode_survives_backend_error(self):
+        from assistant import cli
+
+        class Boom:
+            def ask(self, text):
+                raise RuntimeError("down")
+
+        cfg = Config.from_env(backend="echo", tts="none")
+        with mock.patch.object(cli, "create_backend", return_value=Boom()):
+            with mock.patch("builtins.input", side_effect=["hello", "goodbye"]):
+                rc = cli.run_text_mode(cfg, once=False)
+        self.assertEqual(rc, 0)
+
+    def test_vibe_backend_uses_devnull_stdin(self):
+        import subprocess as sp
+
+        from assistant.brain import VibeBackend
+
+        cfg = Config.from_env(backend="vibe")
+        backend = VibeBackend(cfg)
+        with mock.patch("assistant.brain.subprocess.run") as run:
+            run.return_value = mock.Mock(returncode=0, stdout="ok", stderr="")
+            out = backend.reply([{"role": "user", "content": "hi"}], "sys")
+        self.assertEqual(out, "ok")
+        self.assertIs(run.call_args.kwargs.get("stdin"), sp.DEVNULL)
+
 
 class AudioTest(unittest.TestCase):
     def test_wav_bytes_roundtrip(self):

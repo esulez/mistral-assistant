@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--backend", choices=["auto", "vibe", "api", "echo"], default=None)
     parser.add_argument("--stt", choices=["auto", "mistral", "whisper"], default=None)
     parser.add_argument("--tts", choices=["auto", "kokoro", "piper", "espeak", "none"], default=None)
+    parser.add_argument("--tts-voice", default=None, help="e.g. af_bella, af_sarah, af_heart (Kokoro US female)")
     parser.add_argument("--wake-word", default=None)
     parser.add_argument("--wake-mode", choices=["auto", "model", "phrase"], default=None)
     return parser
@@ -30,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_text_mode(cfg: Config, once: bool) -> int:
     conversation = Conversation(create_backend(cfg), cfg.system_prompt)
-    print(f"text mode | backend={cfg.backend} stt={cfg.stt} tts={cfg.tts} (type 'goodbye' to quit)")
+    print(f"text mode | backend={cfg.backend} stt={cfg.stt} tts={cfg.tts} (type 'goodbye' to quit)", flush=True)
     while True:
         try:
             line = input("you> ").strip()
@@ -40,10 +41,14 @@ def run_text_mode(cfg: Config, once: bool) -> int:
         if not line:
             continue
         if is_exit_phrase(line):
-            print("assistant> Goodbye!")
+            print("assistant> Goodbye!", flush=True)
             break
-        reply = conversation.ask(line)
-        print(f"assistant> {reply}")
+        try:
+            reply = conversation.ask(line)
+        except Exception as exc:
+            print(f"error: {exc}", file=sys.stderr, flush=True)
+            continue
+        print(f"assistant> {reply}", flush=True)
         if once:
             break
     return 0
@@ -100,26 +105,32 @@ def _run_phrase_mode(cfg: Config, once: bool, conversation: Conversation) -> int
         f"wake mode=phrase phrase='{cfg.wake_word}' (Ctrl+C to quit)"
     )
     with Microphone(cfg.sample_rate, cfg.chunk_samples) as mic:
+        print("listening...", flush=True)
         while True:
-            pcm = _record(mic, cfg)
-            if pcm.size == 0:
-                continue
-            query = extract_query(_transcribe_pcm(pcm, cfg), cfg.wake_word)
-            if query is None:
-                continue
-            print("wake phrase detected")
-            beep(cfg.sample_rate)
-            if not query:
+            try:
                 pcm = _record(mic, cfg)
                 if pcm.size == 0:
                     continue
-                query = _transcribe_pcm(pcm, cfg)
-                if not query:
+                query = extract_query(_transcribe_pcm(pcm, cfg), cfg.wake_word)
+                if query is None:
                     continue
-            if _handle_query(query, conversation, cfg):
-                break
-            if once:
-                break
+                print("wake phrase detected", flush=True)
+                beep(cfg.sample_rate)
+                if not query:
+                    pcm = _record(mic, cfg)
+                    if pcm.size == 0:
+                        continue
+                    query = _transcribe_pcm(pcm, cfg)
+                    if not query:
+                        continue
+                if _handle_query(query, conversation, cfg):
+                    break
+                if once:
+                    break
+                print("listening...", flush=True)
+            except Exception as exc:
+                print(f"error: {exc}", file=sys.stderr, flush=True)
+                print("listening...", flush=True)
     return 0
 
 
@@ -136,29 +147,35 @@ def run_voice_mode(cfg: Config, once: bool) -> int:
         f"wake mode=model word='{cfg.wake_word}' (Ctrl+C to quit)"
     )
     with Microphone(cfg.sample_rate, cfg.chunk_samples) as mic:
+        print("listening...", flush=True)
         while True:
-            frame = mic.read()
-            if not listener.feed(frame):
-                continue
-            print("wake word detected")
-            beep(cfg.sample_rate)
-            pcm = _record(mic, cfg)
-            if pcm.size == 0:
-                continue
-            text = _transcribe_pcm(pcm, cfg)
-            if not text:
-                continue
-            if _handle_query(text, conversation, cfg):
-                break
-            if once:
-                break
+            try:
+                frame = mic.read()
+                if not listener.feed(frame):
+                    continue
+                print("wake word detected", flush=True)
+                beep(cfg.sample_rate)
+                pcm = _record(mic, cfg)
+                if pcm.size == 0:
+                    continue
+                text = _transcribe_pcm(pcm, cfg)
+                if not text:
+                    continue
+                if _handle_query(text, conversation, cfg):
+                    break
+                if once:
+                    break
+                print("listening...", flush=True)
+            except Exception as exc:
+                print(f"error: {exc}", file=sys.stderr, flush=True)
+                print("listening...", flush=True)
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     overrides = {}
-    for name in ("backend", "stt", "tts", "wake_word", "wake_mode"):
+    for name in ("backend", "stt", "tts", "tts_voice", "wake_word", "wake_mode"):
         value = getattr(args, name)
         if value is not None:
             overrides[name] = value

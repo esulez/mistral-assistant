@@ -61,7 +61,7 @@ class Config:
             stt_model=overrides.get("stt_model", os.getenv("ASSISTANT_STT_MODEL", DEFAULT_STT_MODEL)),
             whisper_model=overrides.get("whisper_model", os.getenv("ASSISTANT_WHISPER_MODEL", "base")),
             tts=overrides.get("tts", os.getenv("ASSISTANT_TTS", "auto")),
-            tts_voice=overrides.get("tts_voice", os.getenv("ASSISTANT_TTS_VOICE", "af_heart")),
+            tts_voice=overrides.get("tts_voice", os.getenv("ASSISTANT_TTS_VOICE", "af_bella")),
             tts_lang=overrides.get("tts_lang", os.getenv("ASSISTANT_TTS_LANG", "a")),
             wake_word=overrides.get("wake_word", os.getenv("ASSISTANT_WAKE_WORD", DEFAULT_WAKE_WORD)),
             wake_mode=overrides.get("wake_mode", os.getenv("ASSISTANT_WAKE_MODE", "auto")),

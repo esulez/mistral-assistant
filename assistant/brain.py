@@ -1,0 +1,78 @@
+import shutil
+import subprocess
+
+from .config import Config
+
+
+class EchoBackend:
+    def reply(self, history: list[dict], system_prompt: str) -> str:
+        return f"Echo: {history[-1]['content']}"
+
+
+class ApiBackend:
+    def __init__(self, cfg: Config):
+        from mistralai import Mistral
+
+        if not cfg.api_key:
+            raise RuntimeError("MISTRAL_API_KEY is required for backend=api")
+        self.cfg = cfg
+        self.client = Mistral(api_key=cfg.api_key)
+
+    def reply(self, history: list[dict], system_prompt: str) -> str:
+        messages = [{"role": "system", "content": system_prompt}] + history
+        response = self.client.chat.complete(model=self.cfg.model, messages=messages)
+        return response.choices[0].message.content.strip()
+
+
+class VibeBackend:
+    def __init__(self, cfg: Config):
+        if not shutil.which("vibe"):
+            raise RuntimeError("the `vibe` CLI is not on PATH; run backend=api or install Vibe")
+        self.cfg = cfg
+
+    def reply(self, history: list[dict], system_prompt: str) -> str:
+        prompt = history[-1]["content"]
+        base_cmd = ["vibe", "-p", prompt, "--output", "text", "--max-turns", "10"]
+        attempts = [["vibe", "-c", "-p", prompt, "--output", "text", "--max-turns", "10"], base_cmd]
+        last_error = ""
+        for cmd in attempts:
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.cfg.vibe_timeout,
+                )
+            except subprocess.TimeoutExpired:
+                last_error = "vibe timed out"
+                continue
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+            last_error = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"vibe backend failed: {last_error}")
+
+
+def create_backend(cfg: Config):
+    if cfg.backend == "echo":
+        return EchoBackend()
+    if cfg.backend == "api":
+        return ApiBackend(cfg)
+    if cfg.backend == "vibe":
+        return VibeBackend(cfg)
+    raise ValueError(f"unknown backend: {cfg.backend}")
+
+
+class Conversation:
+    def __init__(self, backend, system_prompt: str):
+        self.backend = backend
+        self.system_prompt = system_prompt
+        self.history: list[dict] = []
+
+    def ask(self, text: str) -> str:
+        self.history.append({"role": "user", "content": text})
+        reply = self.backend.reply(self.history, self.system_prompt)
+        self.history.append({"role": "assistant", "content": reply})
+        return reply
+
+    def reset(self) -> None:
+        self.history.clear()

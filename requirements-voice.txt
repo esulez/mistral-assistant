@@ -1,0 +1,6 @@
+-r requirements.txt
+openwakeword
+faster-whisper
+kokoro
+soundfile
+torch

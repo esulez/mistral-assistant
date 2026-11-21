@@ -4,3 +4,4 @@ faster-whisper
 kokoro
 soundfile
 torch
+spacy==3.8.18

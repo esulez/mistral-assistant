@@ -34,7 +34,13 @@ pip install -r requirements.txt          # core: numpy, sounddevice, mistralai
 pip install -r requirements-voice.txt    # full voice stack (wake word, whisper, kokoro)
 ```
 
-On Linux you may need PortAudio for the microphone: `sudo apt install libportaudio2`.
+On Linux you may need PortAudio for the microphone:
+
+```bash
+sudo apt install libportaudio2        # Debian/Ubuntu
+sudo pacman -S portaudio alsa-lib     # Arch
+sudo dnf install portaudio             # Fedora
+```
 
 Set your key (for `stt=mistral` and/or `backend=api`):
 

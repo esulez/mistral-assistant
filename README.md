@@ -30,9 +30,16 @@ microphone -> wake word -> record utterance -> speech-to-text
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # core: numpy, sounddevice, mistralai
-pip install -r requirements-voice.txt    # full voice stack (wake word, whisper, kokoro)
+pip install -r requirements.txt          # core: numpy, sounddevice (mistralai optional, see below)
+pip install -r requirements-voice.txt    # full voice stack (wake word, whisper, kokoro, spacy)
 ```
+
+The `mistralai` SDK is optional: if it is missing or broken, the assistant falls
+back to direct REST calls (`assistant/rest.py`) against `https://api.mistral.ai/v1`,
+so `backend=api` and `stt=mistral` still work. Check an SDK install with
+`python -c "import mistralai; print(mistralai.__file__)"` — if it prints `None`,
+the install is broken (or a stray `mistralai/` folder in the project root shadows
+it); either way the REST fallback keeps things running.
 
 On Linux you may need PortAudio for the microphone:
 
@@ -108,7 +115,8 @@ assistant/
   audio.py     microphone capture, utterance recording, playback
   wakeword.py  wake-word listeners + phrase spotting (normalize/extract_query)
   stt.py       Voxtral API / faster-whisper transcription
-  brain.py     backends (vibe CLI, Mistral API, echo) + conversation state
+  brain.py     backends (vibe CLI, Mistral API/SDK, echo) + conversation state
+  rest.py      dependency-free Mistral REST fallback (chat + Voxtral transcription)
   tts.py       Kokoro / piper / espeak speech synthesis
 tests/
   test_assistant.py

@@ -30,7 +30,13 @@ def transcribe_file(path: str, cfg: Config) -> str:
             raise RuntimeError("MISTRAL_API_KEY is required for stt=mistral")
         with open(path, "rb") as handle:
             content = handle.read()
-        response = _client(cfg.api_key).audio.transcriptions.complete(
+        try:
+            client = _client(cfg.api_key)
+        except RuntimeError:
+            from . import rest
+
+            return rest.transcribe(cfg.api_key, cfg.stt_model, content, os.path.basename(path))
+        response = client.audio.transcriptions.complete(
             model=cfg.stt_model,
             file={"file_name": os.path.basename(path), "content": content},
         )

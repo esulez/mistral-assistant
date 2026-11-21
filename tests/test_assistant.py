@@ -1,10 +1,13 @@
 import io
+import json
 import os
 import sys
 import types
 import unittest
 import wave
 from unittest import mock
+
+import tempfile
 
 import numpy as np
 
@@ -113,23 +116,97 @@ class WakePhraseTest(unittest.TestCase):
         self.assertEqual(resolve_wake_mode("model", None, "salut mistral ça va"), "model")
 
 
-class MistralImportGuardTest(unittest.TestCase):
+class MistralFallbackTest(unittest.TestCase):
     def _broken_sdk(self):
         return mock.patch.dict(sys.modules, {"mistralai": types.ModuleType("mistralai")})
 
-    def test_api_backend_raises_actionable_error_when_sdk_broken(self):
+    def test_api_backend_falls_back_to_rest_when_sdk_broken(self):
         cfg = Config.from_env(backend="api", api_key="k")
-        with self._broken_sdk(), self.assertRaises(RuntimeError) as ctx:
-            create_backend(cfg)
-        self.assertIn("force-reinstall", str(ctx.exception))
+        with self._broken_sdk():
+            backend = create_backend(cfg)
+        self.assertIsNone(backend.client)
+        with mock.patch("assistant.rest.chat_complete", return_value="pong") as rest_call:
+            reply = backend.reply([{"role": "user", "content": "hi"}], "sys")
+        self.assertEqual(reply, "pong")
+        rest_call.assert_called_once()
+        args = rest_call.call_args.args
+        self.assertEqual(args[0], "k")
+        self.assertEqual(args[2], [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}])
 
-    def test_main_returns_2_with_clear_message_when_sdk_broken(self):
+    def test_main_text_mode_works_with_broken_sdk_via_rest(self):
         from assistant.cli import main
 
         with mock.patch.dict(os.environ, {"MISTRAL_API_KEY": "k"}, clear=True):
             with self._broken_sdk():
-                rc = main(["--text", "--backend", "api", "--once"])
-        self.assertEqual(rc, 2)
+                with mock.patch("assistant.rest.chat_complete", return_value="pong"):
+                    with mock.patch("builtins.input", return_value="hello"):
+                        rc = main(["--text", "--backend", "api", "--once"])
+        self.assertEqual(rc, 0)
+
+    def test_stt_mistral_falls_back_to_rest_when_sdk_broken(self):
+        from assistant import stt
+
+        cfg = Config.from_env(stt="mistral", api_key="k")
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(b"RIFF....")
+            path = tmp.name
+        try:
+            with self._broken_sdk():
+                with mock.patch("assistant.rest.transcribe", return_value="salut") as rest_call:
+                    text = stt.transcribe_file(path, cfg)
+            self.assertEqual(text, "salut")
+            rest_call.assert_called_once()
+        finally:
+            os.unlink(path)
+
+
+class RestTest(unittest.TestCase):
+    def _fake_urlopen(self, captured, response_payload):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return json.dumps(response_payload).encode()
+
+        def fake_urlopen(request, timeout=None):
+            captured["url"] = request.full_url
+            captured["auth"] = request.headers.get("Authorization")
+            captured["content_type"] = request.headers.get("Content-type")
+            captured["data"] = request.data
+            return FakeResponse()
+
+        return mock.patch("urllib.request.urlopen", side_effect=fake_urlopen)
+
+    def test_chat_complete_posts_and_parses(self):
+        from assistant import rest
+
+        captured = {}
+        payload = {"choices": [{"message": {"content": " hi "}}]}
+        with self._fake_urlopen(captured, payload):
+            out = rest.chat_complete("k", "m", [{"role": "user", "content": "q"}])
+        self.assertEqual(out, "hi")
+        self.assertEqual(captured["url"], "https://api.mistral.ai/v1/chat/completions")
+        self.assertEqual(captured["auth"], "Bearer k")
+        body = json.loads(captured["data"].decode())
+        self.assertEqual(body, {"model": "m", "messages": [{"role": "user", "content": "q"}]})
+
+    def test_transcribe_sends_multipart(self):
+        from assistant import rest
+
+        captured = {}
+        with self._fake_urlopen(captured, {"text": " salut mistral "}):
+            out = rest.transcribe("k", "voxtral-mini-latest", b"RIFFDATA", "utt.wav")
+        self.assertEqual(out, "salut mistral")
+        self.assertEqual(captured["url"], "https://api.mistral.ai/v1/audio/transcriptions")
+        self.assertIn("multipart/form-data", captured["content_type"])
+        self.assertIn(b'name="model"', captured["data"])
+        self.assertIn(b"voxtral-mini-latest", captured["data"])
+        self.assertIn(b'filename="utt.wav"', captured["data"])
+        self.assertIn(b"RIFFDATA", captured["data"])
 
 
 class TtsTest(unittest.TestCase):

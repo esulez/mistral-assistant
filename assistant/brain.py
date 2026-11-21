@@ -27,12 +27,21 @@ class ApiBackend:
         if not cfg.api_key:
             raise RuntimeError("MISTRAL_API_KEY is required for backend=api")
         self.cfg = cfg
-        self.client = import_mistral()(api_key=cfg.api_key)
+        try:
+            self.client = import_mistral()(api_key=cfg.api_key)
+        except RuntimeError:
+            self.client = None
 
     def reply(self, history: list[dict], system_prompt: str) -> str:
         messages = [{"role": "system", "content": system_prompt}] + history
-        response = self.client.chat.complete(model=self.cfg.model, messages=messages)
-        return response.choices[0].message.content.strip()
+        if self.client is not None:
+            response = self.client.chat.complete(model=self.cfg.model, messages=messages)
+            return response.choices[0].message.content.strip()
+        from . import rest
+
+        return rest.chat_complete(
+            self.cfg.api_key, self.cfg.model, messages, timeout=self.cfg.vibe_timeout
+        )
 
 
 class VibeBackend:

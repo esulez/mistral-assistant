@@ -79,6 +79,16 @@ class CliHelpersTest(unittest.TestCase):
         for phrase in ("goodbye everyone", "hello", ""):
             self.assertFalse(is_exit_phrase(phrase), phrase)
 
+    def test_handle_query_survives_backend_error(self):
+        from assistant.cli import _handle_query
+
+        class Boom:
+            def ask(self, text):
+                raise RuntimeError("api down")
+
+        cfg = Config.from_env(tts="none")
+        self.assertFalse(_handle_query("hello", Boom(), cfg))
+
 
 class AudioTest(unittest.TestCase):
     def test_wav_bytes_roundtrip(self):
@@ -193,6 +203,34 @@ class RestTest(unittest.TestCase):
         self.assertEqual(captured["auth"], "Bearer k")
         body = json.loads(captured["data"].decode())
         self.assertEqual(body, {"model": "m", "messages": [{"role": "user", "content": "q"}]})
+
+    def test_chat_complete_joins_list_content_parts(self):
+        from assistant import rest
+
+        captured = {}
+        payload = {
+            "choices": [
+                {"message": {"content": [{"type": "text", "text": "Hello"}, {"type": "text", "text": " there"}]}}
+            ]
+        }
+        with self._fake_urlopen(captured, payload):
+            out = rest.chat_complete("k", "m", [])
+        self.assertEqual(out, "Hello there")
+
+    def test_chat_complete_raises_on_missing_choices(self):
+        from assistant import rest
+
+        with self._fake_urlopen({}, {"error": "bad"}):
+            with self.assertRaises(RuntimeError):
+                rest.chat_complete("k", "m", [])
+
+    def test_extract_text_variants(self):
+        from assistant.rest import extract_text
+
+        self.assertEqual(extract_text(" hi "), "hi")
+        self.assertEqual(extract_text([{"type": "text", "text": "a"}, {"text": "b"}]), "ab")
+        self.assertEqual(extract_text(None), "")
+        self.assertEqual(extract_text([]), "")
 
     def test_transcribe_sends_multipart(self):
         from assistant import rest

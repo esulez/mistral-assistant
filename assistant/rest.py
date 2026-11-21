@@ -19,6 +19,22 @@ def _post_json(path: str, payload: dict, api_key: str, timeout: float) -> dict:
         return json.loads(response.read().decode())
 
 
+def extract_text(content) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if text is not None:
+                    parts.append(str(text))
+            else:
+                parts.append(str(item))
+        return "".join(parts).strip()
+    return str(content or "").strip()
+
+
 def chat_complete(api_key: str, model: str, messages: list[dict], timeout: float = 180) -> str:
     data = _post_json(
         "/chat/completions",
@@ -26,7 +42,11 @@ def chat_complete(api_key: str, model: str, messages: list[dict], timeout: float
         api_key,
         timeout,
     )
-    return data["choices"][0]["message"]["content"].strip()
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError(f"unexpected response from Mistral API: {data}")
+    message = choices[0].get("message") or {}
+    return extract_text(message.get("content", ""))
 
 
 def _post_multipart(path: str, fields: dict, files: dict, api_key: str, timeout: float) -> dict:

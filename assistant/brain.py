@@ -2,6 +2,7 @@ import shutil
 import subprocess
 
 from .config import Config
+from .rest import extract_text
 
 
 def import_mistral():
@@ -36,7 +37,7 @@ class ApiBackend:
         messages = [{"role": "system", "content": system_prompt}] + history
         if self.client is not None:
             response = self.client.chat.complete(model=self.cfg.model, messages=messages)
-            return response.choices[0].message.content.strip()
+            return extract_text(response.choices[0].message.content)
         from . import rest
 
         return rest.chat_complete(

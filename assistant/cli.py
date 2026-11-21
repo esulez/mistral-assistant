@@ -69,7 +69,12 @@ def _handle_query(text: str, conversation: Conversation, cfg: Config) -> bool:
     if is_exit_phrase(text):
         speak("Goodbye!", cfg)
         return True
-    reply = conversation.ask(text)
+    try:
+        reply = conversation.ask(text)
+    except Exception as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        speak("Sorry, something went wrong.", cfg)
+        return False
     print(f"assistant> {reply}")
     speak(reply, cfg)
     return False

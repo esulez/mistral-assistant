@@ -77,10 +77,13 @@ def _post_multipart(path: str, fields: dict, files: dict, api_key: str, timeout:
 
 
 def transcribe(api_key: str, model: str, wav_bytes: bytes, filename: str = "utterance.wav",
-               timeout: float = 300) -> str:
+               language: str | None = None, timeout: float = 300) -> str:
+    fields = {"model": model}
+    if language:
+        fields["language"] = language
     data = _post_multipart(
         "/audio/transcriptions",
-        {"model": model},
+        fields,
         {"file": (filename, wav_bytes, "audio/wav")},
         api_key,
         timeout,

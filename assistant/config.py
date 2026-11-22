@@ -3,7 +3,8 @@ import shutil
 from dataclasses import dataclass
 
 DEFAULT_SYSTEM_PROMPT = (
-    "You are Mistral Assistant, a voice-first assistant. "
+    "You are Mistral Assistant, a voice-first assistant. Reply in the same language "
+    "the user speaks; you understand English, French, Italian and Spanish. "
     "Keep answers short, conversational, and easy to listen to."
 )
 DEFAULT_STT_MODEL = "voxtral-mini-latest"
@@ -31,6 +32,7 @@ class Config:
     system_prompt: str
     stt: str
     stt_model: str
+    stt_language: str | None
     whisper_model: str
     tts: str
     tts_voice: str
@@ -59,10 +61,11 @@ class Config:
             ),
             stt=overrides.get("stt", os.getenv("ASSISTANT_STT", "auto")),
             stt_model=overrides.get("stt_model", os.getenv("ASSISTANT_STT_MODEL", DEFAULT_STT_MODEL)),
+            stt_language=overrides.get("stt_language", os.getenv("ASSISTANT_STT_LANGUAGE") or None),
             whisper_model=overrides.get("whisper_model", os.getenv("ASSISTANT_WHISPER_MODEL", "base")),
             tts=overrides.get("tts", os.getenv("ASSISTANT_TTS", "auto")),
             tts_voice=overrides.get("tts_voice", os.getenv("ASSISTANT_TTS_VOICE", "af_bella")),
-            tts_lang=overrides.get("tts_lang", os.getenv("ASSISTANT_TTS_LANG", "a")),
+            tts_lang=overrides.get("tts_lang", os.getenv("ASSISTANT_TTS_LANG", "auto")),
             wake_word=overrides.get("wake_word", os.getenv("ASSISTANT_WAKE_WORD", DEFAULT_WAKE_WORD)),
             wake_mode=overrides.get("wake_mode", os.getenv("ASSISTANT_WAKE_MODE", "auto")),
             wakeword_model=overrides.get(

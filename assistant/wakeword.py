@@ -1,3 +1,4 @@
+import difflib
 import re
 import unicodedata
 
@@ -13,12 +14,26 @@ def normalize_text(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", stripped).strip()
 
 
-def extract_query(text: str, wake_phrase: str) -> str | None:
-    norm_phrase = normalize_text(wake_phrase)
+def extract_query(text: str, wake_phrase: str, fuzzy_threshold: float = 0.7) -> str | None:
     norm_text = normalize_text(text)
-    if not norm_phrase or norm_phrase not in norm_text:
+    if not norm_text:
         return None
-    return norm_text.split(norm_phrase, 1)[1].strip()
+    phrases = [normalize_text(p) for p in wake_phrase.split("|") if normalize_text(p)]
+    for phrase in phrases:
+        if phrase in norm_text:
+            return norm_text.split(phrase, 1)[1].strip()
+    tokens = norm_text.split()
+    for phrase in phrases:
+        ptokens = phrase.split()
+        n = len(ptokens)
+        best_ratio, best_index = 0.0, 0
+        for i in range(max(1, len(tokens) - n + 1)):
+            ratio = difflib.SequenceMatcher(None, ptokens, tokens[i:i + n]).ratio()
+            if ratio > best_ratio:
+                best_ratio, best_index = ratio, i
+        if best_ratio >= fuzzy_threshold:
+            return " ".join(tokens[best_index + n:]).strip()
+    return None
 
 
 class OpenWakeWordListener:

@@ -53,6 +53,8 @@ class VibeBackend:
 
     def reply(self, history: list[dict], system_prompt: str) -> str:
         prompt = history[-1]["content"]
+        if system_prompt:
+            prompt = f"{system_prompt}\n\n{prompt}"
         base_cmd = ["vibe", "-p", prompt, "--output", "text", "--max-turns", "10"]
         attempts = [["vibe", "-c", "-p", prompt, "--output", "text", "--max-turns", "10"], base_cmd]
         last_error = ""

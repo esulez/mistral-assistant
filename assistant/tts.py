@@ -5,8 +5,18 @@ import subprocess
 import tempfile
 
 from .config import Config
+from .lang import DEFAULT_VOICES, LANG_CODES, detect_language
 
-_kokoro_pipeline = None
+_kokoro_pipelines: dict[str, object] = {}
+
+
+def kokoro_params(text: str, cfg: Config) -> tuple[str, str]:
+    if cfg.tts_lang and cfg.tts_lang != "auto":
+        return cfg.tts_lang, cfg.tts_voice
+    lang = detect_language(text)
+    lang_code = LANG_CODES.get(lang, "a")
+    voice = cfg.tts_voice if cfg.tts_voice.startswith(lang_code) else DEFAULT_VOICES.get(lang, "af_bella")
+    return lang_code, voice
 
 
 def available_engines() -> list[str]:
@@ -35,17 +45,19 @@ def resolve_tts(requested: str) -> str:
 
 
 def _kokoro_synthesize(text: str, cfg: Config) -> tuple[bytes, int]:
-    global _kokoro_pipeline
-    if _kokoro_pipeline is None:
-        from kokoro import KPipeline
+    from kokoro import KPipeline
 
-        _kokoro_pipeline = KPipeline(lang_code=cfg.tts_lang)
     import numpy as np
     import soundfile as sf
     import torch
 
+    lang_code, voice = kokoro_params(text, cfg)
+    pipeline = _kokoro_pipelines.get(lang_code)
+    if pipeline is None:
+        pipeline = KPipeline(lang_code=lang_code)
+        _kokoro_pipelines[lang_code] = pipeline
     chunks = []
-    for _gs, _ps, audio in _kokoro_pipeline(text, voice=cfg.tts_voice):
+    for _gs, _ps, audio in pipeline(text, voice=voice):
         chunks.append(audio)
     if not chunks:
         raise RuntimeError("kokoro produced no audio")

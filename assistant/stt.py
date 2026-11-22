@@ -35,13 +35,19 @@ def transcribe_file(path: str, cfg: Config) -> str:
         except RuntimeError:
             from . import rest
 
-            return rest.transcribe(cfg.api_key, cfg.stt_model, content, os.path.basename(path))
+            return rest.transcribe(
+                cfg.api_key, cfg.stt_model, content, os.path.basename(path), language=cfg.stt_language
+            )
+        kwargs = {}
+        if cfg.stt_language:
+            kwargs["language"] = cfg.stt_language
         response = client.audio.transcriptions.complete(
             model=cfg.stt_model,
             file={"file_name": os.path.basename(path), "content": content},
+            **kwargs,
         )
         return (response.text or "").strip()
     if cfg.stt == "whisper":
-        segments, _info = _whisper(cfg).transcribe(path)
+        segments, _info = _whisper(cfg).transcribe(path, language=cfg.stt_language)
         return " ".join(segment.text for segment in segments).strip()
     raise ValueError(f"unknown stt backend: {cfg.stt}")

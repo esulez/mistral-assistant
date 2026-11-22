@@ -15,7 +15,8 @@ from assistant.audio import wav_bytes
 from assistant.brain import Conversation, EchoBackend, create_backend
 from assistant.cli import is_exit_phrase
 from assistant.config import Config, resolve_backend, resolve_stt, resolve_wake_mode
-from assistant.tts import resolve_tts
+from assistant.lang import DEFAULT_VOICES, detect_language
+from assistant.tts import kokoro_params, resolve_tts
 from assistant.wakeword import extract_query, normalize_text
 
 
@@ -150,6 +151,43 @@ class WakePhraseTest(unittest.TestCase):
         self.assertEqual(resolve_wake_mode("auto", "/tmp/custom.onnx", "anything"), "model")
         self.assertEqual(resolve_wake_mode("phrase", None, "alexa"), "phrase")
         self.assertEqual(resolve_wake_mode("model", None, "salut mistral ça va"), "model")
+
+    def test_extract_query_fuzzy_matches_stt_mishearing(self):
+        self.assertEqual(
+            extract_query("salut mistral sa va, quelle heure est-il ?", "salut mistral ça va"),
+            "quelle heure est il",
+        )
+
+    def test_extract_query_multiple_phrases(self):
+        wake = "salut mistral ça va|hey mistral"
+        self.assertEqual(extract_query("hey mistral, what time is it", wake), "what time is it")
+        self.assertEqual(extract_query("Salut Mistral, ça va ?", wake), "")
+        self.assertIsNone(extract_query("bonjour", wake))
+
+
+class LanguageTest(unittest.TestCase):
+    def test_detect_language(self):
+        self.assertEqual(detect_language("Hello, how are you today?"), "en")
+        self.assertEqual(detect_language("Bonjour, comment ça va aujourd'hui ?"), "fr")
+        self.assertEqual(detect_language("Ciao, come stai? Grazie mille"), "it")
+        self.assertEqual(detect_language("¿Hola, cómo estás? Gracias"), "es")
+        self.assertEqual(detect_language("The weather is nice today"), "en")
+
+    def test_kokoro_params_autodetects_per_language(self):
+        cfg = Config.from_env(tts="kokoro")
+        self.assertEqual(kokoro_params("Hello there", cfg), ("a", DEFAULT_VOICES["en"]))
+        self.assertEqual(kokoro_params("Bonjour, ça va ?", cfg), ("f", DEFAULT_VOICES["fr"]))
+        self.assertEqual(kokoro_params("Ciao, come stai?", cfg), ("i", DEFAULT_VOICES["it"]))
+        self.assertEqual(kokoro_params("¿Hola, cómo estás?", cfg), ("e", DEFAULT_VOICES["es"]))
+
+    def test_kokoro_params_explicit_lang_and_voice(self):
+        cfg = Config.from_env(tts="kokoro", tts_lang="f", tts_voice="ff_siwis")
+        self.assertEqual(kokoro_params("Hello", cfg), ("f", "ff_siwis"))
+
+    def test_kokoro_params_keeps_matching_voice(self):
+        cfg = Config.from_env(tts="kokoro", tts_voice="af_sarah")
+        self.assertEqual(kokoro_params("Hello", cfg), ("a", "af_sarah"))
+        self.assertEqual(kokoro_params("Bonjour", cfg)[0], "f")
 
 
 class MistralFallbackTest(unittest.TestCase):

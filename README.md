@@ -88,6 +88,15 @@ and the session continues. To pick a voice: `--tts-voice af_sarah` (or
 `ASSISTANT_TTS_VOICE=af_sarah`). US English female Kokoro voices: `af_bella`
 (default), `af_sarah`, `af_heart`, `af_nicole`, `af_sky`.
 
+## Troubleshooting
+
+- `error: No module named 'faster_whisper'` — the voice extras are missing (a
+  failed `pip install -r requirements-voice.txt` aborts the whole batch). Run
+  `pip install -r requirements-voice.txt` again, or set `MISTRAL_API_KEY` and use
+  `--stt mistral` instead of local whisper.
+- `import mistralai` prints `None` for `__file__` — broken SDK install; harmless,
+  the built-in REST fallback is used automatically.
+
 ## Configuration
 
 All settings can be overridden with environment variables:

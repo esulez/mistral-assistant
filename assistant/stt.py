@@ -18,8 +18,14 @@ def _client(api_key: str):
 def _whisper(cfg: Config):
     global _whisper_model
     if _whisper_model is None:
-        from faster_whisper import WhisperModel
-
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            raise RuntimeError(
+                "stt=whisper needs faster-whisper: run 'pip install -r requirements-voice.txt' "
+                "(or 'pip install faster-whisper'); alternatively set MISTRAL_API_KEY and use "
+                "stt=mistral"
+            ) from exc
         _whisper_model = WhisperModel(cfg.whisper_model, device="cpu", compute_type="int8")
     return _whisper_model
 

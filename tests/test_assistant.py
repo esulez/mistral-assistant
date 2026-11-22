@@ -311,6 +311,19 @@ class RestTest(unittest.TestCase):
         self.assertIn(b"RIFFDATA", captured["data"])
 
 
+class SttDependencyTest(unittest.TestCase):
+    def test_whisper_missing_dependency_has_actionable_error(self):
+        from assistant import stt
+
+        stt._whisper_model = None
+        self.addCleanup(setattr, stt, "_whisper_model", None)
+        cfg = Config.from_env(stt="whisper", api_key=None)
+        with mock.patch.dict(sys.modules, {"faster_whisper": None}):
+            with self.assertRaises(RuntimeError) as ctx:
+                stt._whisper(cfg)
+        self.assertIn("requirements-voice.txt", str(ctx.exception))
+
+
 class TtsTest(unittest.TestCase):
     def test_resolve_tts_explicit(self):
         self.assertEqual(resolve_tts("none"), "none")

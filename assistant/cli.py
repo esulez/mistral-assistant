@@ -6,7 +6,7 @@ import tempfile
 from .brain import Conversation, create_backend
 from .config import Config
 
-EXIT_PHRASES = {"goodbye", "stop listening", "exit", "quit", "stop the assistant"}
+EXIT_PHRASES = {"goodbye", "good bye", "bye", "stop listening", "exit", "quit", "stop the assistant"}
 
 
 def is_exit_phrase(text: str) -> bool:
@@ -98,41 +98,61 @@ def _record(mic, cfg: Config):
     )
 
 
+def _phrase_loop(cfg: Config, once: bool, conversation: Conversation,
+                 record, transcribe, on_wake=None) -> bool:
+    from .wakeword import extract_query
+
+    woken = False
+    print("listening...", flush=True)
+    while True:
+        try:
+            pcm = record()
+            if pcm.size == 0:
+                continue
+            text = transcribe(pcm)
+            if not woken:
+                query = extract_query(text, cfg.wake_word)
+                if query is None:
+                    continue
+                if not query:
+                    query = text
+                woken = True
+                if on_wake:
+                    on_wake()
+            else:
+                query = text
+            if not query:
+                continue
+            if _handle_query(query, conversation, cfg):
+                return True
+            if once:
+                return False
+            print("listening...", flush=True)
+        except Exception as exc:
+            print(f"error: {exc}", file=sys.stderr, flush=True)
+            print("listening...", flush=True)
+
+
 def _run_phrase_mode(cfg: Config, once: bool, conversation: Conversation) -> int:
     from .audio import Microphone, beep
-    from .wakeword import extract_query
 
     print(
         f"voice mode | backend={cfg.backend} stt={cfg.stt} tts={cfg.tts} "
         f"wake mode=phrase phrase='{cfg.wake_word}' (Ctrl+C to quit)"
     )
     with Microphone(cfg.sample_rate, cfg.chunk_samples) as mic:
-        print("listening...", flush=True)
-        while True:
-            try:
-                pcm = _record(mic, cfg)
-                if pcm.size == 0:
-                    continue
-                query = extract_query(_transcribe_pcm(pcm, cfg), cfg.wake_word)
-                if query is None:
-                    continue
-                print("wake phrase detected", flush=True)
-                beep(cfg.sample_rate, device=cfg.output_device)
-                if not query:
-                    pcm = _record(mic, cfg)
-                    if pcm.size == 0:
-                        continue
-                    query = _transcribe_pcm(pcm, cfg)
-                    if not query:
-                        continue
-                if _handle_query(query, conversation, cfg):
-                    break
-                if once:
-                    break
-                print("listening...", flush=True)
-            except Exception as exc:
-                print(f"error: {exc}", file=sys.stderr, flush=True)
-                print("listening...", flush=True)
+        def on_wake():
+            print("wake phrase detected - conversation open (say 'good bye' to end)", flush=True)
+            beep(cfg.sample_rate, device=cfg.output_device)
+
+        _phrase_loop(
+            cfg,
+            once,
+            conversation,
+            record=lambda: _record(mic, cfg),
+            transcribe=lambda pcm: _transcribe_pcm(pcm, cfg),
+            on_wake=on_wake,
+        )
     return 0
 
 
@@ -158,14 +178,17 @@ def run_voice_mode(cfg: Config, once: bool) -> int:
         f"wake mode=model word='{cfg.wake_word}' (Ctrl+C to quit)"
     )
     with Microphone(cfg.sample_rate, cfg.chunk_samples) as mic:
+        woken = False
         print("listening...", flush=True)
         while True:
             try:
-                frame = mic.read()
-                if not listener.feed(frame):
-                    continue
-                print("wake word detected", flush=True)
-                beep(cfg.sample_rate, device=cfg.output_device)
+                if not woken:
+                    frame = mic.read()
+                    if not listener.feed(frame):
+                        continue
+                    print("wake word detected - conversation open (say 'good bye' to end)", flush=True)
+                    beep(cfg.sample_rate, device=cfg.output_device)
+                    woken = True
                 pcm = _record(mic, cfg)
                 if pcm.size == 0:
                     continue

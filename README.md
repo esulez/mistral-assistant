@@ -82,9 +82,12 @@ python -m assistant --text               # type instead of speaking
 printf 'hello\ngoodbye\n' | python -m assistant --text --backend echo
 ```
 
-Say "goodbye" (or press Ctrl+C) to end the session. After each answer the
-assistant prints `listening...` and keeps listening; per-turn errors are logged
-and the session continues. To pick a voice: `--tts-voice af_sarah` (or
+Once the wake phrase is detected the assistant **answers it as a greeting**
+("salut mistral ça va" gets a spoken "ça va bien, et toi ?") and then stays in
+**free-flow conversation** — you keep talking without repeating the wake phrase
+— until you say "good bye" / "goodbye" (or press Ctrl+C). After each answer it
+prints `listening...`; per-turn errors are logged and the session continues.
+To pick a voice: `--tts-voice af_sarah` (or
 `ASSISTANT_TTS_VOICE=af_sarah`). US English female Kokoro voices: `af_bella`
 (default), `af_sarah`, `af_heart`, `af_nicole`, `af_sky`.
 

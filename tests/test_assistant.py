@@ -1,4 +1,5 @@
 import io
+import itertools
 import json
 import os
 import sys
@@ -75,7 +76,7 @@ class ConversationTest(unittest.TestCase):
 
 class CliHelpersTest(unittest.TestCase):
     def test_exit_phrases(self):
-        for phrase in ("goodbye", "Goodbye!", " stop listening ", "EXIT."):
+        for phrase in ("goodbye", "Goodbye!", "good bye", "Bye", " stop listening ", "EXIT."):
             self.assertTrue(is_exit_phrase(phrase), phrase)
         for phrase in ("goodbye everyone", "hello", ""):
             self.assertFalse(is_exit_phrase(phrase), phrase)
@@ -322,6 +323,50 @@ class SttDependencyTest(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 stt._whisper(cfg)
         self.assertIn("requirements-voice.txt", str(ctx.exception))
+
+
+class PhraseLoopTest(unittest.TestCase):
+    def _cfg(self):
+        return Config.from_env(backend="echo", tts="none", wake_word="salut mistral ça va")
+
+    def _run_loop(self, texts, once):
+        from assistant.cli import _phrase_loop
+
+        class Rec:
+            def __init__(self):
+                self.queries = []
+
+            def ask(self, text):
+                self.queries.append(text)
+                return "ok"
+
+        conv = Rec()
+        wake_calls = []
+        pcm = itertools.cycle([np.zeros(16, dtype=np.int16)])
+        end = _phrase_loop(
+            self._cfg(),
+            once,
+            conv,
+            record=lambda: next(pcm),
+            transcribe=lambda _pcm: next(iter(texts)),
+            on_wake=lambda: wake_calls.append(1),
+        )
+        return end, conv.queries, len(wake_calls)
+
+    def test_free_flow_after_wake_until_good_bye(self):
+        end, queries, wakes = self._run_loop(
+            iter(["bonjour", "salut mistral ça va", "quelle heure est il", "good bye"]), once=False
+        )
+        self.assertTrue(end)
+        self.assertEqual(queries, ["salut mistral ça va", "quelle heure est il"])
+        self.assertEqual(wakes, 1)
+
+    def test_once_stops_after_first_query(self):
+        end, queries, _wakes = self._run_loop(
+            iter(["salut mistral ça va, quel temps fait il", "encore une question"]), once=True
+        )
+        self.assertFalse(end)
+        self.assertEqual(queries, ["quel temps fait il"])
 
 
 class KokoroSynthesizeTest(unittest.TestCase):

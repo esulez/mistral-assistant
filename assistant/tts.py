@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import warnings
 
 from .config import Config
 from .lang import DEFAULT_VOICES, LANG_CODES, detect_language
@@ -52,11 +53,13 @@ def _kokoro_synthesize(text: str, cfg: Config) -> tuple[bytes, int]:
     import torch
 
     lang_code, voice = kokoro_params(text, cfg)
-    pipeline = _kokoro_pipelines.get(lang_code)
-    if pipeline is None:
-        pipeline = KPipeline(lang_code=lang_code)
-        _kokoro_pipelines[lang_code] = pipeline
-    arrays = [np.asarray(audio, dtype=np.float32) for _gs, _ps, audio in pipeline(text, voice=voice)]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pipeline = _kokoro_pipelines.get(lang_code)
+        if pipeline is None:
+            pipeline = KPipeline(lang_code=lang_code)
+            _kokoro_pipelines[lang_code] = pipeline
+        arrays = [np.asarray(audio, dtype=np.float32) for _gs, _ps, audio in pipeline(text, voice=voice)]
     if not arrays:
         raise RuntimeError("kokoro produced no audio")
     samples = torch.as_tensor(np.concatenate(arrays))

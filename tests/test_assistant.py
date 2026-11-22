@@ -17,6 +17,7 @@ from assistant.brain import Conversation, EchoBackend, create_backend
 from assistant.cli import is_exit_phrase
 from assistant.config import Config, resolve_backend, resolve_stt, resolve_wake_mode
 from assistant.lang import DEFAULT_VOICES, detect_language
+from assistant.web import needs_web, search
 from assistant.tts import kokoro_params, resolve_tts
 from assistant.wakeword import extract_query, normalize_text
 
@@ -76,10 +77,72 @@ class ConversationTest(unittest.TestCase):
 
 class CliHelpersTest(unittest.TestCase):
     def test_exit_phrases(self):
-        for phrase in ("goodbye", "Goodbye!", "good bye", "Bye", " stop listening ", "EXIT."):
+        for phrase in ("goodbye", "Goodbye!", "good bye", "Bye", " stop listening ", "EXIT.",
+                       "No, I'm good. Thank you. Goodbye."):
             self.assertTrue(is_exit_phrase(phrase), phrase)
-        for phrase in ("goodbye everyone", "hello", ""):
+        for phrase in ("hello", "", "see you", "sometimes I wonder"):
             self.assertFalse(is_exit_phrase(phrase), phrase)
+
+
+class WebTest(unittest.TestCase):
+    def test_needs_web(self):
+        self.assertTrue(needs_web("what's the weather forecast in Belgium today?"))
+        self.assertTrue(needs_web("quelle heure est-il maintenant ?"))
+        self.assertTrue(needs_web("what time is it"))
+        self.assertTrue(needs_web("prix de l'or aujourd'hui"))
+        self.assertFalse(needs_web("tell me a joke"))
+        self.assertFalse(needs_web("sometimes I wonder about things"))
+
+    def test_search_parses_duckduckgo_lite(self):
+        page = (
+            "<a rel='nofollow' href='//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fweather' "
+            "class='result-link'>Weather Belgium</a>"
+            "<td class='result-snippet'>Sunny, 21&deg;C in Brussels today</td>"
+        )
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return page.encode()
+
+        with mock.patch("urllib.request.urlopen", return_value=FakeResponse()) as urlopen:
+            results = search("weather belgium")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "Weather Belgium")
+        self.assertEqual(results[0]["url"], "https://example.com/weather")
+        self.assertIn("Sunny", results[0]["snippet"])
+        self.assertIn("lite.duckduckgo.com", urlopen.call_args.args[0].full_url)
+
+
+class ApiBackendWebTest(unittest.TestCase):
+    def test_weather_query_gets_web_context_and_time(self):
+        cfg = Config.from_env(backend="api", api_key="k")
+        backend = create_backend(cfg)
+        with mock.patch("assistant.web.search", return_value=[
+            {"title": "Weather Belgium", "snippet": "Sunny 21C", "url": "https://example.com/w"}
+        ]) as search_mock:
+            with mock.patch("assistant.rest.chat_complete", return_value="ok") as chat:
+                reply = backend.reply([{"role": "user", "content": "weather in Belgium today?"}], "sys")
+        self.assertEqual(reply, "ok")
+        search_mock.assert_called_once()
+        system = chat.call_args.args[2][0]["content"]
+        self.assertIn("Web search results", system)
+        self.assertIn("Weather Belgium", system)
+        self.assertIn("Current date and time", system)
+
+    def test_plain_query_skips_web(self):
+        cfg = Config.from_env(backend="api", api_key="k")
+        backend = create_backend(cfg)
+        with mock.patch("assistant.web.search") as search_mock:
+            with mock.patch("assistant.rest.chat_complete", return_value="ok") as chat:
+                backend.reply([{"role": "user", "content": "tell me a joke"}], "sys")
+        search_mock.assert_not_called()
+        self.assertNotIn("Web search results", chat.call_args.args[2][0]["content"])
 
     def test_handle_query_survives_backend_error(self):
         from assistant.cli import _handle_query
@@ -206,7 +269,8 @@ class MistralFallbackTest(unittest.TestCase):
         rest_call.assert_called_once()
         args = rest_call.call_args.args
         self.assertEqual(args[0], "k")
-        self.assertEqual(args[2], [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}])
+        self.assertTrue(args[2][0]["content"].startswith("sys"))
+        self.assertEqual(args[2][1], {"role": "user", "content": "hi"})
 
     def test_main_text_mode_works_with_broken_sdk_via_rest(self):
         from assistant.cli import main

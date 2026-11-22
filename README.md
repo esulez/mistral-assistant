@@ -154,6 +154,7 @@ assistant/
   audio.py     microphone capture, utterance recording, playback
   wakeword.py  wake-word listeners + phrase spotting (normalize/extract_query, fuzzy, multi-phrase)
   lang.py      reply language detection + per-language Kokoro voice mapping
+  web.py       needs-web detection (EN/FR/IT/ES) + DuckDuckGo search (stdlib)
   stt.py       Voxtral API / faster-whisper transcription
   brain.py     backends (vibe CLI, Mistral API/SDK, echo) + conversation state
   rest.py      dependency-free Mistral REST fallback (chat + Voxtral transcription)

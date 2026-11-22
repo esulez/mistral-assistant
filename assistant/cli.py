@@ -1,16 +1,17 @@
 import argparse
 import os
+import re
 import sys
 import tempfile
 
 from .brain import Conversation, create_backend
 from .config import Config
 
-EXIT_PHRASES = {"goodbye", "good bye", "bye", "stop listening", "exit", "quit", "stop the assistant"}
+EXIT_RE = re.compile(r"\b(good ?bye|bye|stop listening|stop the assistant|exit|quit)\b", re.IGNORECASE)
 
 
 def is_exit_phrase(text: str) -> bool:
-    return text.strip().lower().strip(".!?") in EXIT_PHRASES
+    return bool(EXIT_RE.search(text))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wake-mode", choices=["auto", "model", "phrase"], default=None)
     parser.add_argument("--output-device", default=None, help="speaker device index or name (see --list-devices)")
     parser.add_argument("--list-devices", action="store_true", help="list audio devices and exit")
+    parser.add_argument("--no-web", action="store_true", help="disable web search for backend=api")
     return parser
 
 
@@ -213,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
         value = getattr(args, name)
         if value is not None:
             overrides[name] = value
+    if args.no_web:
+        overrides["web_search"] = False
     cfg = Config.from_env(**overrides)
     if args.list_devices:
         import sounddevice as sd

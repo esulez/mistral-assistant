@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+from datetime import datetime
 
 from .config import Config
 from .rest import extract_text
@@ -34,7 +35,18 @@ class ApiBackend:
             self.client = None
 
     def reply(self, history: list[dict], system_prompt: str) -> str:
-        messages = [{"role": "system", "content": system_prompt}] + history
+        user_text = history[-1]["content"]
+        extra = f"\nCurrent date and time: {datetime.now().strftime('%Y-%m-%d %H:%M (%A)')}"
+        if self.cfg.web_search:
+            from . import web
+
+            if web.needs_web(user_text):
+                results = web.search(user_text)
+                if results:
+                    extra += "\nWeb search results (use them if relevant):\n" + "\n".join(
+                        f"- {r['title']} — {r['snippet']} ({r['url']})" for r in results
+                    )
+        messages = [{"role": "system", "content": system_prompt + extra}] + history
         if self.client is not None:
             response = self.client.chat.complete(model=self.cfg.model, messages=messages)
             return extract_text(response.choices[0].message.content)

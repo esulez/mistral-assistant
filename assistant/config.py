@@ -48,6 +48,7 @@ class Config:
     max_utterance_seconds: float
     vibe_timeout: float
     output_device: str | None
+    web_search: bool
 
     @classmethod
     def from_env(cls, **overrides) -> "Config":
@@ -84,6 +85,10 @@ class Config:
             ),
             vibe_timeout=float(overrides.get("vibe_timeout", os.getenv("ASSISTANT_VIBE_TIMEOUT", "180"))),
             output_device=overrides.get("output_device", os.getenv("ASSISTANT_OUTPUT_DEVICE") or None),
+            web_search=overrides.get(
+                "web_search",
+                os.getenv("ASSISTANT_WEB_SEARCH", "true").lower() not in ("0", "false", "no"),
+            ),
         )
         values["backend"] = resolve_backend(values["backend"], api_key)
         values["stt"] = resolve_stt(values["stt"], api_key)

@@ -46,6 +46,10 @@ def resolve_tts(requested: str) -> str:
 
 
 def _kokoro_synthesize(text: str, cfg: Config) -> tuple[bytes, int]:
+    import logging
+
+    for logger_name in ("huggingface_hub", "misaki", "torch", "torch.jit"):
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
     from kokoro import KPipeline
 
     import numpy as np

@@ -324,6 +324,55 @@ class SttDependencyTest(unittest.TestCase):
         self.assertIn("requirements-voice.txt", str(ctx.exception))
 
 
+class KokoroSynthesizeTest(unittest.TestCase):
+    def test_accepts_numpy_chunks_from_pipeline(self):
+        from assistant import tts as tts_mod
+
+        fake_kokoro = types.ModuleType("kokoro")
+
+        class FakePipeline:
+            def __init__(self, lang_code):
+                self.lang_code = lang_code
+
+            def __call__(self, text, voice):
+                yield "gs", "ps", np.array([0.1, 0.2], dtype=np.float32)
+                yield "gs", "ps", np.array([0.3], dtype=np.float32)
+
+        fake_kokoro.KPipeline = FakePipeline
+        fake_torch = types.ModuleType("torch")
+        captured = {}
+
+        class FakeTensor:
+            def __init__(self, arr):
+                self.arr = arr
+
+            def cpu(self):
+                return self
+
+            def numpy(self):
+                return self.arr
+
+        fake_torch.as_tensor = lambda arr: FakeTensor(arr)
+        fake_sf = types.ModuleType("soundfile")
+
+        def fake_write(buf, samples, rate, format, subtype=None):
+            captured["samples"] = samples
+            captured["rate"] = rate
+            captured["subtype"] = subtype
+            buf.write(b"WAV")
+
+        fake_sf.write = fake_write
+        modules = {"kokoro": fake_kokoro, "torch": fake_torch, "soundfile": fake_sf}
+        tts_mod._kokoro_pipelines.clear()
+        self.addCleanup(tts_mod._kokoro_pipelines.clear)
+        with mock.patch.dict(sys.modules, modules):
+            data, rate = tts_mod._kokoro_synthesize("hello", Config.from_env(tts="kokoro"))
+        self.assertEqual(rate, 24000)
+        self.assertEqual(data, b"WAV")
+        self.assertEqual(captured["subtype"], "PCM_16")
+        self.assertEqual(list(captured["samples"]), [0.1, 0.2, 0.3])
+
+
 class TtsTest(unittest.TestCase):
     def test_resolve_tts_explicit(self):
         self.assertEqual(resolve_tts("none"), "none")

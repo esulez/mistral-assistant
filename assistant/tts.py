@@ -56,14 +56,12 @@ def _kokoro_synthesize(text: str, cfg: Config) -> tuple[bytes, int]:
     if pipeline is None:
         pipeline = KPipeline(lang_code=lang_code)
         _kokoro_pipelines[lang_code] = pipeline
-    chunks = []
-    for _gs, _ps, audio in pipeline(text, voice=voice):
-        chunks.append(audio)
-    if not chunks:
+    arrays = [np.asarray(audio, dtype=np.float32) for _gs, _ps, audio in pipeline(text, voice=voice)]
+    if not arrays:
         raise RuntimeError("kokoro produced no audio")
-    samples = torch.cat(chunks).cpu().numpy().astype(np.float32)
+    samples = torch.as_tensor(np.concatenate(arrays))
     buffer = io.BytesIO()
-    sf.write(buffer, samples, 24000, format="WAV")
+    sf.write(buffer, samples.cpu().numpy(), 24000, format="WAV", subtype="PCM_16")
     return buffer.getvalue(), 24000
 
 
@@ -114,4 +112,4 @@ def speak(text: str, cfg: Config) -> None:
         print(f"(no tts engine) {text}")
         return
     data, _sample_rate = result
-    play_wav_bytes(data)
+    play_wav_bytes(data, device=cfg.output_device)

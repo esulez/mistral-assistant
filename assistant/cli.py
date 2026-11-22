@@ -26,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tts-voice", default=None, help="e.g. af_bella, af_sarah, af_heart (Kokoro US female)")
     parser.add_argument("--wake-word", default=None)
     parser.add_argument("--wake-mode", choices=["auto", "model", "phrase"], default=None)
+    parser.add_argument("--output-device", default=None, help="speaker device index or name (see --list-devices)")
+    parser.add_argument("--list-devices", action="store_true", help="list audio devices and exit")
     return parser
 
 
@@ -115,7 +117,7 @@ def _run_phrase_mode(cfg: Config, once: bool, conversation: Conversation) -> int
                 if query is None:
                     continue
                 print("wake phrase detected", flush=True)
-                beep(cfg.sample_rate)
+                beep(cfg.sample_rate, device=cfg.output_device)
                 if not query:
                     pcm = _record(mic, cfg)
                     if pcm.size == 0:
@@ -136,9 +138,18 @@ def _run_phrase_mode(cfg: Config, once: bool, conversation: Conversation) -> int
 
 def run_voice_mode(cfg: Config, once: bool) -> int:
     from .audio import Microphone, beep
+    from .tts import resolve_tts
     from .wakeword import create_listener
 
+    cfg.tts = resolve_tts(cfg.tts)
     conversation = Conversation(create_backend(cfg), cfg.system_prompt)
+    try:
+        import sounddevice as sd
+
+        device = cfg.output_device or sd.default.device[1]
+        print(f"audio out: {sd.query_devices(device)['name']}", flush=True)
+    except Exception:
+        pass
     if cfg.wake_mode == "phrase":
         return _run_phrase_mode(cfg, once, conversation)
     listener = create_listener(cfg)
@@ -154,7 +165,7 @@ def run_voice_mode(cfg: Config, once: bool) -> int:
                 if not listener.feed(frame):
                     continue
                 print("wake word detected", flush=True)
-                beep(cfg.sample_rate)
+                beep(cfg.sample_rate, device=cfg.output_device)
                 pcm = _record(mic, cfg)
                 if pcm.size == 0:
                     continue
@@ -175,11 +186,16 @@ def run_voice_mode(cfg: Config, once: bool) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     overrides = {}
-    for name in ("backend", "stt", "tts", "tts_voice", "wake_word", "wake_mode"):
+    for name in ("backend", "stt", "tts", "tts_voice", "wake_word", "wake_mode", "output_device"):
         value = getattr(args, name)
         if value is not None:
             overrides[name] = value
     cfg = Config.from_env(**overrides)
+    if args.list_devices:
+        import sounddevice as sd
+
+        print(sd.query_devices())
+        return 0
     try:
         if args.text:
             return run_text_mode(cfg, args.once)

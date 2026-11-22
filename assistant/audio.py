@@ -19,7 +19,14 @@ def save_wav(path: str, pcm: np.ndarray, sample_rate: int) -> None:
         handle.write(wav_bytes(pcm, sample_rate))
 
 
-def play_wav_bytes(data: bytes) -> None:
+def resolve_device(device):
+    if device is None:
+        return None
+    text = str(device)
+    return int(text) if text.isdigit() else text
+
+
+def play_wav_bytes(data: bytes, device=None) -> None:
     import sounddevice as sd
 
     with wave.open(io.BytesIO(data), "rb") as wav:
@@ -38,16 +45,16 @@ def play_wav_bytes(data: bytes) -> None:
     samples = np.frombuffer(raw, dtype=dtype).astype(np.float32) / scale
     if channels > 1:
         samples = samples.reshape(-1, channels)
-    sd.play(samples, sample_rate)
+    sd.play(samples, sample_rate, device=resolve_device(device))
     sd.wait()
 
 
-def beep(sample_rate: int = 16000, frequency: float = 880.0, duration: float = 0.15) -> None:
+def beep(sample_rate: int = 16000, frequency: float = 880.0, duration: float = 0.15, device=None) -> None:
     import sounddevice as sd
 
     t = np.arange(int(sample_rate * duration)) / sample_rate
     tone = 0.3 * np.sin(2 * np.pi * frequency * t).astype(np.float32)
-    sd.play(tone, sample_rate)
+    sd.play(tone, sample_rate, device=resolve_device(device))
     sd.wait()
 
 

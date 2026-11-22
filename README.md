@@ -96,6 +96,17 @@ and the session continues. To pick a voice: `--tts-voice af_sarah` (or
   `--stt mistral` instead of local whisper.
 - `import mistralai` prints `None` for `__file__` — broken SDK install; harmless,
   the built-in REST fallback is used automatically.
+- First voice run downloads the Kokoro model (~330 MB) and voice file from HF
+  Hub; the `HF_TOKEN` warning is harmless — set `HF_TOKEN` only if you want
+  higher download rate limits.
+- `error: expected Tensor ... but got numpy.ndarray` — fixed in 941f5f9+; pull
+  the latest `main`.
+- No sound although replies print: check the startup banner — it now shows the
+  resolved `tts=` engine and `audio out:` device. Run `python -m assistant
+  --list-devices` and pick your speakers with `--output-device <index|name>`
+  (or `ASSISTANT_OUTPUT_DEVICE`). If the banner shows `tts=none`, Kokoro/piper/
+  espeak are missing — reinstall `requirements-voice.txt`. Kokoro also writes
+  PCM16 WAV now, which every player handles.
 
 ## Configuration
 
@@ -122,6 +133,7 @@ All settings can be overridden with environment variables:
 | `ASSISTANT_SILENCE_SECONDS` | `1.5` | silence that ends an utterance |
 | `ASSISTANT_MAX_UTTERANCE_SECONDS` | `30` | longest single utterance |
 | `ASSISTANT_VIBE_TIMEOUT` | `180` | seconds to wait for a `vibe` reply |
+| `ASSISTANT_OUTPUT_DEVICE` | default output | speaker device index or name (`--list-devices`, `--output-device`) |
 
 ## Development
 

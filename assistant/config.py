@@ -47,6 +47,7 @@ class Config:
     silence_seconds: float
     max_utterance_seconds: float
     vibe_timeout: float
+    output_device: str | None
 
     @classmethod
     def from_env(cls, **overrides) -> "Config":
@@ -82,6 +83,7 @@ class Config:
                 overrides.get("max_utterance_seconds", os.getenv("ASSISTANT_MAX_UTTERANCE_SECONDS", "30"))
             ),
             vibe_timeout=float(overrides.get("vibe_timeout", os.getenv("ASSISTANT_VIBE_TIMEOUT", "180"))),
+            output_device=overrides.get("output_device", os.getenv("ASSISTANT_OUTPUT_DEVICE") or None),
         )
         values["backend"] = resolve_backend(values["backend"], api_key)
         values["stt"] = resolve_stt(values["stt"], api_key)

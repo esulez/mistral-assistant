@@ -31,7 +31,9 @@ microphone -> wake word -> record utterance -> speech-to-text
   `ASSISTANT_TTS_LANG` / `--tts-voice`.
 - **Brain**: `backend=vibe` shells out to `vibe -p "..."` (continues the current
   Vibe session with `-c`, so conversations carry over); `backend=api` uses the
-  Mistral chat completions API; `backend=echo` is a no-key test backend.
+  Mistral chat completions API; `backend=deepseek` uses the DeepSeek API
+  (`DEEPSEEK_API_KEY`, default model `deepseek-chat`, also `deepseek-reasoner`);
+  `backend=echo` is a no-key test backend.
 - **Text-to-speech**: local Kokoro (`tts=kokoro`), or `piper`, or `espeak` if
   installed; `tts=none` prints instead of speaking.
 
@@ -64,6 +66,12 @@ Set your key (for `stt=mistral` and/or `backend=api`):
 export MISTRAL_API_KEY=...
 ```
 
+Or use DeepSeek as the brain (`backend=deepseek`):
+
+```bash
+export DEEPSEEK_API_KEY=...
+```
+
 ## Run
 
 Voice mode (needs a microphone and speaker):
@@ -73,6 +81,7 @@ python -m assistant                      # say "salut mistral ça va", then talk
 python -m assistant --wake-word "hey jarvis"   # built-in model mode
 python -m assistant --wake-word "hey computer"  # custom phrase mode (via STT)
 python -m assistant --backend api --once # single question via the Mistral API
+python -m assistant --backend deepseek --once # single question via DeepSeek
 ```
 
 Text mode (no audio hardware, e.g. over SSH or for testing):
@@ -118,8 +127,9 @@ All settings can be overridden with environment variables:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `MISTRAL_API_KEY` | — | Mistral API key (STT via Voxtral and/or `backend=api`) |
-| `ASSISTANT_BACKEND` | `auto` | `vibe`, `api`, `echo`, or `auto` (vibe CLI if on PATH, else API key, else echo) |
-| `ASSISTANT_MODEL` | `mistral-large-latest` | chat model for `backend=api` |
+| `DEEPSEEK_API_KEY` | — | DeepSeek API key for `backend=deepseek` |
+| `ASSISTANT_BACKEND` | `auto` | `vibe`, `api`, `deepseek`, `echo`, or `auto` (vibe CLI if on PATH, else Mistral key, else DeepSeek key, else echo) |
+| `ASSISTANT_MODEL` | `mistral-large-latest` (`deepseek-chat` for `backend=deepseek`) | chat model for `backend=api` / `backend=deepseek` |
 | `ASSISTANT_SYSTEM_PROMPT` | short voice-assistant prompt | system prompt for `backend=api` |
 | `ASSISTANT_STT` | `auto` | `mistral` (Voxtral API) or `whisper` (local faster-whisper) |
 | `ASSISTANT_STT_MODEL` | `voxtral-mini-latest` | transcription model for `stt=mistral` |
@@ -156,8 +166,8 @@ assistant/
   lang.py      reply language detection + per-language Kokoro voice mapping
   web.py       needs-web detection (EN/FR/IT/ES) + DuckDuckGo search (stdlib)
   stt.py       Voxtral API / faster-whisper transcription
-  brain.py     backends (vibe CLI, Mistral API/SDK, echo) + conversation state
-  rest.py      dependency-free Mistral REST fallback (chat + Voxtral transcription)
+  brain.py     backends (vibe CLI, Mistral API/SDK, DeepSeek API, echo) + conversation state
+  rest.py      dependency-free REST client (Mistral chat/Voxtral + DeepSeek chat)
   tts.py       Kokoro / piper / espeak speech synthesis
 tests/
   test_assistant.py

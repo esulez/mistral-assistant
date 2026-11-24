@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--text", action="store_true", help="text mode: type instead of speaking")
     parser.add_argument("--once", action="store_true", help="handle a single query, then exit")
-    parser.add_argument("--backend", choices=["auto", "vibe", "api", "echo"], default=None)
+    parser.add_argument("--backend", choices=["auto", "vibe", "api", "deepseek", "echo"], default=None)
     parser.add_argument("--stt", choices=["auto", "mistral", "whisper"], default=None)
     parser.add_argument("--tts", choices=["auto", "kokoro", "piper", "espeak", "none"], default=None)
     parser.add_argument("--tts-voice", default=None, help="e.g. af_bella, af_sarah, af_heart (Kokoro US female)")

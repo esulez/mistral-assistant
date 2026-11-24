@@ -24,6 +24,21 @@ class EchoBackend:
         return f"Echo: {history[-1]['content']}"
 
 
+def build_messages(cfg: Config, history: list[dict], system_prompt: str) -> list[dict]:
+    user_text = history[-1]["content"]
+    extra = f"\nCurrent date and time: {datetime.now().strftime('%Y-%m-%d %H:%M (%A)')}"
+    if cfg.web_search:
+        from . import web
+
+        if web.needs_web(user_text):
+            results = web.search(user_text)
+            if results:
+                extra += "\nWeb search results (use them if relevant):\n" + "\n".join(
+                    f"- {r['title']} — {r['snippet']} ({r['url']})" for r in results
+                )
+    return [{"role": "system", "content": system_prompt + extra}] + history
+
+
 class ApiBackend:
     def __init__(self, cfg: Config):
         if not cfg.api_key:
@@ -35,18 +50,7 @@ class ApiBackend:
             self.client = None
 
     def reply(self, history: list[dict], system_prompt: str) -> str:
-        user_text = history[-1]["content"]
-        extra = f"\nCurrent date and time: {datetime.now().strftime('%Y-%m-%d %H:%M (%A)')}"
-        if self.cfg.web_search:
-            from . import web
-
-            if web.needs_web(user_text):
-                results = web.search(user_text)
-                if results:
-                    extra += "\nWeb search results (use them if relevant):\n" + "\n".join(
-                        f"- {r['title']} — {r['snippet']} ({r['url']})" for r in results
-                    )
-        messages = [{"role": "system", "content": system_prompt + extra}] + history
+        messages = build_messages(self.cfg, history, system_prompt)
         if self.client is not None:
             response = self.client.chat.complete(model=self.cfg.model, messages=messages)
             return extract_text(response.choices[0].message.content)
@@ -54,6 +58,24 @@ class ApiBackend:
 
         return rest.chat_complete(
             self.cfg.api_key, self.cfg.model, messages, timeout=self.cfg.vibe_timeout
+        )
+
+
+class DeepSeekBackend:
+    def __init__(self, cfg: Config):
+        if not cfg.deepseek_api_key:
+            raise RuntimeError("DEEPSEEK_API_KEY is required for backend=deepseek")
+        self.cfg = cfg
+
+    def reply(self, history: list[dict], system_prompt: str) -> str:
+        from . import rest
+
+        return rest.chat_complete(
+            self.cfg.deepseek_api_key,
+            self.cfg.model,
+            build_messages(self.cfg, history, system_prompt),
+            timeout=self.cfg.vibe_timeout,
+            api_base=rest.DEEPSEEK_API_BASE,
         )
 
 
@@ -93,6 +115,8 @@ def create_backend(cfg: Config):
         return EchoBackend()
     if cfg.backend == "api":
         return ApiBackend(cfg)
+    if cfg.backend == "deepseek":
+        return DeepSeekBackend(cfg)
     if cfg.backend == "vibe":
         return VibeBackend(cfg)
     raise ValueError(f"unknown backend: {cfg.backend}")

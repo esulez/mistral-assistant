@@ -3,11 +3,12 @@ import urllib.request
 import uuid
 
 API_BASE = "https://api.mistral.ai/v1"
+DEEPSEEK_API_BASE = "https://api.deepseek.com/v1"
 
 
-def _post_json(path: str, payload: dict, api_key: str, timeout: float) -> dict:
+def _post_json(path: str, payload: dict, api_key: str, timeout: float, api_base: str = API_BASE) -> dict:
     request = urllib.request.Request(
-        f"{API_BASE}{path}",
+        f"{api_base}{path}",
         data=json.dumps(payload).encode(),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -35,12 +36,15 @@ def extract_text(content) -> str:
     return str(content or "").strip()
 
 
-def chat_complete(api_key: str, model: str, messages: list[dict], timeout: float = 180) -> str:
+def chat_complete(
+    api_key: str, model: str, messages: list[dict], timeout: float = 180, api_base: str = API_BASE
+) -> str:
     data = _post_json(
         "/chat/completions",
         {"model": model, "messages": messages},
         api_key,
         timeout,
+        api_base,
     )
     choices = data.get("choices") or []
     if not choices:

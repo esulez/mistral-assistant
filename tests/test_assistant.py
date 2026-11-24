@@ -49,10 +49,61 @@ class ConfigTest(unittest.TestCase):
             self.assertEqual(resolve_backend("auto", "key"), "api")
             self.assertEqual(resolve_backend("auto", None), "echo")
 
+    def test_resolve_backend_auto_uses_deepseek_key(self):
+        with mock.patch("shutil.which", return_value=None):
+            self.assertEqual(resolve_backend("auto", None, "dk"), "deepseek")
+            self.assertEqual(resolve_backend("auto", "mk", "dk"), "api")
+            self.assertEqual(resolve_backend("auto", None, None), "echo")
+        self.assertEqual(resolve_backend("deepseek", None, None), "deepseek")
+
+    def test_deepseek_backend_defaults(self):
+        env = {"DEEPSEEK_API_KEY": "dk", "ASSISTANT_BACKEND": "deepseek"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            cfg = Config.from_env()
+        self.assertEqual(cfg.backend, "deepseek")
+        self.assertEqual(cfg.deepseek_api_key, "dk")
+        self.assertEqual(cfg.model, "deepseek-chat")
+
+    def test_deepseek_model_override_kept(self):
+        env = {
+            "DEEPSEEK_API_KEY": "dk",
+            "ASSISTANT_BACKEND": "deepseek",
+            "ASSISTANT_MODEL": "deepseek-reasoner",
+        }
+        with mock.patch.dict(os.environ, env, clear=True):
+            cfg = Config.from_env()
+        self.assertEqual(cfg.model, "deepseek-reasoner")
+
     def test_resolve_stt(self):
         self.assertEqual(resolve_stt("auto", "key"), "mistral")
         self.assertEqual(resolve_stt("auto", None), "whisper")
         self.assertEqual(resolve_stt("whisper", "key"), "whisper")
+
+
+class DeepSeekBackendTest(unittest.TestCase):
+    def test_requires_api_key(self):
+        cfg = Config.from_env(backend="deepseek", deepseek_api_key=None)
+        with self.assertRaises(RuntimeError) as ctx:
+            create_backend(cfg)
+        self.assertIn("DEEPSEEK_API_KEY", str(ctx.exception))
+
+    def test_reply_posts_to_deepseek_base(self):
+        from assistant import rest
+        from assistant.brain import DeepSeekBackend
+
+        cfg = Config.from_env(backend="deepseek", deepseek_api_key="dk")
+        backend = create_backend(cfg)
+        self.assertIsInstance(backend, DeepSeekBackend)
+        with mock.patch("assistant.rest.chat_complete", return_value="pong") as chat:
+            reply = backend.reply([{"role": "user", "content": "hi"}], "sys")
+        self.assertEqual(reply, "pong")
+        args, kwargs = chat.call_args
+        self.assertEqual(args[0], "dk")
+        self.assertEqual(args[1], "deepseek-chat")
+        self.assertEqual(args[2][0]["content"][:3], "sys")
+        self.assertEqual(args[2][1], {"role": "user", "content": "hi"})
+        self.assertEqual(kwargs["api_base"], rest.DEEPSEEK_API_BASE)
+        self.assertEqual(kwargs["timeout"], cfg.vibe_timeout)
 
 
 class ConversationTest(unittest.TestCase):
@@ -345,6 +396,17 @@ class RestTest(unittest.TestCase):
         with self._fake_urlopen(captured, payload):
             out = rest.chat_complete("k", "m", [])
         self.assertEqual(out, "Hello there")
+
+    def test_chat_complete_custom_api_base(self):
+        from assistant import rest
+
+        captured = {}
+        payload = {"choices": [{"message": {"content": "ok"}}]}
+        with self._fake_urlopen(captured, payload):
+            out = rest.chat_complete("k", "deepseek-chat", [], api_base=rest.DEEPSEEK_API_BASE)
+        self.assertEqual(out, "ok")
+        self.assertEqual(captured["url"], "https://api.deepseek.com/v1/chat/completions")
+        self.assertEqual(captured["auth"], "Bearer k")
 
     def test_chat_complete_raises_on_missing_choices(self):
         from assistant import rest

@@ -9,6 +9,7 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 DEFAULT_STT_MODEL = "voxtral-mini-latest"
 DEFAULT_CHAT_MODEL = "mistral-large-latest"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
 DEFAULT_WAKE_WORD = "salut mistral ça va"
 
 BUILTIN_WAKE_WORDS = {
@@ -27,6 +28,7 @@ BUILTIN_WAKE_WORDS = {
 @dataclass
 class Config:
     api_key: str | None
+    deepseek_api_key: str | None
     backend: str
     model: str
     system_prompt: str
@@ -53,10 +55,12 @@ class Config:
     @classmethod
     def from_env(cls, **overrides) -> "Config":
         api_key = overrides.get("api_key", os.getenv("MISTRAL_API_KEY"))
+        deepseek_api_key = overrides.get("deepseek_api_key", os.getenv("DEEPSEEK_API_KEY"))
         values = dict(
             api_key=api_key,
+            deepseek_api_key=deepseek_api_key,
             backend=overrides.get("backend", os.getenv("ASSISTANT_BACKEND", "auto")),
-            model=overrides.get("model", os.getenv("ASSISTANT_MODEL", DEFAULT_CHAT_MODEL)),
+            model=overrides.get("model", os.getenv("ASSISTANT_MODEL")),
             system_prompt=overrides.get(
                 "system_prompt",
                 os.getenv("ASSISTANT_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT),
@@ -90,7 +94,11 @@ class Config:
                 os.getenv("ASSISTANT_WEB_SEARCH", "true").lower() not in ("0", "false", "no"),
             ),
         )
-        values["backend"] = resolve_backend(values["backend"], api_key)
+        values["backend"] = resolve_backend(values["backend"], api_key, deepseek_api_key)
+        if values["model"] is None:
+            values["model"] = (
+                DEFAULT_DEEPSEEK_MODEL if values["backend"] == "deepseek" else DEFAULT_CHAT_MODEL
+            )
         values["stt"] = resolve_stt(values["stt"], api_key)
         values["wake_mode"] = resolve_wake_mode(
             values["wake_mode"], values["wakeword_model"], values["wake_word"]
@@ -98,13 +106,15 @@ class Config:
         return cls(**values)
 
 
-def resolve_backend(requested: str, api_key: str | None) -> str:
+def resolve_backend(requested: str, api_key: str | None, deepseek_api_key: str | None = None) -> str:
     if requested != "auto":
         return requested
     if shutil.which("vibe"):
         return "vibe"
     if api_key:
         return "api"
+    if deepseek_api_key:
+        return "deepseek"
     return "echo"
 
 
